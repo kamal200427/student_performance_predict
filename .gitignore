@@ -66,3 +66,20 @@ Thumbs.db
 # -------------------------
 *.tmp
 *.temp
+# Node modules (React)
+node_modules/
+build/
+
+# Python virtual environment
+venv/
+.env/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Model files
+*.pkl
+
+# CSV datasets
+*.csv

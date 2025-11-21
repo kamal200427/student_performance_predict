@@ -1,3 +1,6 @@
+import os
+import subprocess
+
 from flask import Flask, request, jsonify
 import pickle
 import pandas as pd
@@ -5,7 +8,10 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
-
+if not os.path.exists("model_bundle.pkl"):
+    print("model_bundle.pkl not found. Running model.py to generate it...")
+    subprocess.run(["python", "model.py"], check=True)
+    print("model.py executed. Model generated successfully!")
 # -----------------------------
 # Load Model + Encoders Bundle
 # -----------------------------
@@ -17,7 +23,7 @@ le_gender = bundle["le_gender"]
 le_style = bundle["le_style"]
 le_discussion = bundle["le_discussion"]
 le_tech = bundle["le_tech"]
-le_stress = bundle["le_stress"]
+le_level = bundle["le_level"]
 le_grade = bundle["le_grade"]
 
 
@@ -68,7 +74,7 @@ def predict():
                 value = le_tech.transform([value])[0]
 
             elif feature == "Self_Reported_Stress_Level":
-                value = le_stress.transform([value])[0]
+                value = le_level.transform([value])[0]
 
             else:
                 # Convert numeric fields to float

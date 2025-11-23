@@ -9,9 +9,11 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
 import requests
-
+import traceback
+from openai import OpenAI
 # progress_model must provide db and progress_bp (your existing code)
-from progress_model import db, progress_bp
+from progress_model import db, progress_bp,ProgressEntry
+from datetime import datetime,timezone
 
 # Optional OpenAI import
 try:
@@ -126,6 +128,31 @@ def predict():
             final_grade = le_grade.inverse_transform([int(pred[0])])[0]
         except Exception:
             final_grade = pred[0]
+         # ---------------------------
+        # Store in progress database
+        # -----------------------
+        i=1
+        student_id = data.get("student_id", f"{i+1}")
+        stress_level_value = data.get("Self_Reported_Stress_Level")
+# Map string levels to int (High=3, Medium=2, Low=1) if needed
+        if isinstance(stress_level_value, str):
+            mapping = {"Low": 1, "Medium": 2, "High": 3}
+            stress_level_value = mapping.get(stress_level_value, 0)
+        else:
+            stress_level_value = int(stress_level_value or 0)
+
+        new_entry = ProgressEntry(
+        student_id=student_id,
+        time=datetime.now(timezone.utc).time(),
+        date=datetime.now(timezone.utc).date(),
+        study_hours=input_data["Study_Hours_per_Week"],
+        exam_score=input_data["Exam_Score"],
+        attendance=input_data["Attendance_Rate"],
+        stress_level=stress_level_value,
+        sleep_hours=input_data["Sleep_Hours_per_Night"],
+        )
+        db.session.add(new_entry)
+        db.session.commit()
         return jsonify({"predicted_grade": final_grade})
     except Exception as e:
         logger.exception("Prediction error")
@@ -169,44 +196,35 @@ def fetch_student_progress_text(student_id: str, limit: int = 8) -> str:
     except Exception:
         logger.debug("Could not fetch progress for student %s", student_id)
         return ""
+# Initialize OpenAI client
+client = OpenAI(api_key="OPENAI_API_KEY")
+# 1. Chatbot Fallback Function
+# ---------------------------
+def fallback_reply(msg):
+    return f"Sorry, I could not process that. But I'm here — ask me anything!"
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    ip = request.remote_addr
-    if not rate_limit(ip):
-        return jsonify({"reply": "You are sending messages too fast. Slow down!"}), 429
+    try:
+        data = request.get_json()
+        user_msg = data.get("message", "")
 
-    data = request.json
-    user_msg = data.get("message", "").strip()
+        completion = client.responses.create(
+            model="gpt-4.1-mini",
+            input=user_msg
+        )
 
-    if not user_msg:
-        return jsonify({"reply": "Please type something."}), 400
+        reply = completion.output_text
 
-    api_key = os.getenv("OPENAI_API_KEY")
+        return jsonify({"reply": reply})
 
-    if api_key:
-        try:
-            client = OpenAI(api_key=api_key)
+    except Exception as e:
+        print("Chat Error:", e)
+        traceback.print_exc()
 
-            messages = [
-                {"role": "system", "content": tutor_system_prompt()},
-                {"role": "user", "content": user_msg}
-            ]
+        # Return fallback reply
+        return jsonify({"reply": fallback_reply(user_msg)})
 
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                max_tokens=300
-            )
-
-            reply = response.choices[0].message.content
-            return jsonify({"reply": reply})
-
-        except Exception as e:
-            print("OpenAI error:", e)
-            return jsonify({"reply": fallback_reply(user_msg)})
-
-    return jsonify({"reply": fallback_reply(user_msg)})
 
 # -----------------------
 # health + root

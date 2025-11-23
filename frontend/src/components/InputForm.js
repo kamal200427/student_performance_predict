@@ -1,7 +1,36 @@
 import React, { useState } from "react";
+import PropTypes from "prop-types";
+import {
+  Grid,
+  TextField,
+  MenuItem,
+  Button,
+  Card,
+  CardContent,
+  Typography,
+  Alert,
+  CircularProgress,
+  InputAdornment,
+  Stack,
+  Avatar,
+  Box,
+} from "@mui/material";
+import SchoolIcon from "@mui/icons-material/School";
+import PersonIcon from "@mui/icons-material/Person";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import PollIcon from "@mui/icons-material/Poll";
+import ScoreIcon from "@mui/icons-material/Score";
 import predict from "../api/predict";
 
-const InputForm = () => {
+/**
+ * Clean, modern InputForm:
+ * - outlined TextFields (labels visible)
+ * - helpful placeholders and example helperText
+ * - consistent spacing and responsive layout
+ * - colored result banner (green/orange/red) with icon
+ */
+
+export default function InputForm({ onResult }) {
   const [formData, setFormData] = useState({
     Age: "",
     Gender: "",
@@ -18,289 +47,375 @@ const InputForm = () => {
     Sleep_Hours_per_Night: "",
   });
 
-  const [prediction, setPrediction] = useState(null); // NEW: store predicted result
-  const [loading, setLoading] = useState(false); // optional: show loading
-  const [error, setError] = useState(null); // optional: show error
+  const [loading, setLoading] = useState(false);
+  const [prediction, setPrediction] = useState(null);
+  const [error, setError] = useState(null);
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setFormData((p) => ({ ...p, [name]: value }));
+  };
+
+  const validate = (d) => {
+    if (!d.Age || Number(d.Age) <= 0) return "Please enter a valid age (e.g. 18).";
+    if (d.Assignment_Completion_Rate !== "" && (Number(d.Assignment_Completion_Rate) < 0 || Number(d.Assignment_Completion_Rate) > 100))
+      return "Assignment Completion must be 0–100.";
+    if (d.Exam_Score !== "" && (Number(d.Exam_Score) < 0 || Number(d.Exam_Score) > 100))
+      return "Exam Score must be 0–100.";
+    if (d.Attendance_Rate !== "" && (Number(d.Attendance_Rate) < 0 || Number(d.Attendance_Rate) > 100))
+      return "Attendance must be 0–100.";
+    return null;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
     setPrediction(null);
 
-    try {
-      const formattedData = {
-        ...formData,
-        Age: Number(formData.Age),
-        Study_Hours_per_Week: Number(formData.Study_Hours_per_Week),
-        Online_Courses_Completed: Number(formData.Online_Courses_Completed),
-        Assignment_Completion_Rate: Number(formData.Assignment_Completion_Rate),
-        Exam_Score: Number(formData.Exam_Score),
-        Attendance_Rate: Number(formData.Attendance_Rate),
-        Time_Spent_on_Social_Media: Number(formData.Time_Spent_on_Social_Media),
-        Sleep_Hours_per_Night: Number(formData.Sleep_Hours_per_Night),
-      };
+    const formatted = {
+      ...formData,
+      // cast numeric fields only; keep empty fields as 0 for predict but validate first
+      Age: Number(formData.Age),
+      Study_Hours_per_Week: formData.Study_Hours_per_Week === "" ? 0 : Number(formData.Study_Hours_per_Week),
+      Online_Courses_Completed: formData.Online_Courses_Completed === "" ? 0 : Number(formData.Online_Courses_Completed),
+      Assignment_Completion_Rate: formData.Assignment_Completion_Rate === "" ? 0 : Number(formData.Assignment_Completion_Rate),
+      Exam_Score: formData.Exam_Score === "" ? 0 : Number(formData.Exam_Score),
+      Attendance_Rate: formData.Attendance_Rate === "" ? 0 : Number(formData.Attendance_Rate),
+      Time_Spent_on_Social_Media: formData.Time_Spent_on_Social_Media === "" ? 0 : Number(formData.Time_Spent_on_Social_Media),
+      Sleep_Hours_per_Night: formData.Sleep_Hours_per_Night === "" ? 0 : Number(formData.Sleep_Hours_per_Night),
+    };
 
-      const predictionResult = await predict(formattedData);
-      setPrediction(predictionResult); // display prediction in UI
+    const v = validate(formatted);
+    if (v) {
+      setError(v);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await predict(formatted);
+      // normalize response
+      const normalized = typeof res === "string" || typeof res === "number" ? res : res?.prediction ?? res?.result ?? res;
+      setPrediction(normalized);
+      onResult && onResult(normalized);
     } catch (err) {
-      setError("Error: " + err.message);
+      setError(err?.message || "Prediction failed.");
     } finally {
       setLoading(false);
     }
   };
 
+  // helper for colored result
+  const resultStyle = (pred) => {
+    if (!pred) return { bgcolor: "transparent", color: "text.primary", icon: null };
+    // Example mapping — adjust to your grading scheme
+    const p = String(pred).toUpperCase();
+    if (["A+", "A", "B+"].includes(p)) return { bgcolor: "rgba(16,185,129,0.12)", color: "#047857", icon: "✅" };
+    if (["B", "C", "C+"].includes(p)) return { bgcolor: "rgba(250,204,21,0.12)", color: "#92400e", icon: "🎯" };
+    return { bgcolor: "rgba(239,68,68,0.12)", color: "#b91c1c", icon: "⚠️" };
+  };
+
+  const resStyle = resultStyle(prediction);
+
   return (
-    <div>
-      <form onSubmit={handleSubmit} style={styles.form}>
-        <h2 style={styles.heading}>🎓 Student Performance Prediction</h2>
+    <Card sx={{ borderRadius: 3, boxShadow: "0 18px 40px rgba(15,23,42,0.08)" }}>
+      <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+          <Avatar sx={{ bgcolor: "primary.main", width: 64, height: 64 }}>
+            <SchoolIcon sx={{ fontSize: 30 }} />
+          </Avatar>
+          <div>
+            <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: 0.2 }}>
+              Student Performance Prediction
+            </Typography>
+            <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
+              Enter the student profile — examples are shown as placeholders.
+            </Typography>
+          </div>
+        </Stack>
 
-        <div style={styles.grid}>
-          {/* AGE */}
-          <label style={styles.label}>Age</label>
-          <input
-            type="number"
-            name="Age"
-            value={formData.Age}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          />
+        <Box component="form" onSubmit={handleSubmit}>
+          <Grid container spacing={2}>
+            {/* row 1 */}
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="Age"
+                name="Age"
+                type="number"
+                placeholder="e.g. 20"
+                value={formData.Age}
+                onChange={handleChange}
+                helperText="Student's age"
+                variant="outlined"
+                fullWidth
+                required
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <PersonIcon />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
 
-          {/* GENDER */}
-          <label style={styles.label}>Gender</label>
-          <select
-            name="Gender"
-            value={formData.Gender}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          >
-            <option value="">Select</option>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-            <option value="Other">Other</option>
-          </select>
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="Gender"
+                name="Gender"
+                select
+                value={formData.Gender}
+                onChange={handleChange}
+                helperText="Select gender"
+                variant="outlined"
+                fullWidth
+                required
+              >
+                <MenuItem value="">Select</MenuItem>
+                <MenuItem value="Male">Male</MenuItem>
+                <MenuItem value="Female">Female</MenuItem>
+                <MenuItem value="Other">Other</MenuItem>
+              </TextField>
+            </Grid>
 
-          {/* STUDY HOURS */}
-          <label style={styles.label}>Study Hours / Week</label>
-          <input
-            type="number"
-            name="Study_Hours_per_Week"
-            value={formData.Study_Hours_per_Week}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          />
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="Study Hours / Week"
+                name="Study_Hours_per_Week"
+                type="number"
+                placeholder="e.g. 12"
+                value={formData.Study_Hours_per_Week}
+                onChange={handleChange}
+                helperText="Hours spent studying per week"
+                variant="outlined"
+                fullWidth
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <AccessTimeIcon />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
 
-          {/* LEARNING STYLE */}
-          <label style={styles.label}>Preferred Learning Style</label>
-          <select
-            name="Preferred_Learning_Style"
-            value={formData.Preferred_Learning_Style}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          >
-            <option value="">Select</option>
-            <option value="Visual">Visual</option>
-            <option value="Auditory">Auditory</option>
-            <option value="Reading/Writing">Reading / Writing</option>
-            <option value="Kinesthetic">Kinesthetic</option>
-          </select>
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="Learning Style"
+                name="Preferred_Learning_Style"
+                select
+                value={formData.Preferred_Learning_Style}
+                onChange={handleChange}
+                helperText="Visual / Auditory / Reading / Kinesthetic"
+                variant="outlined"
+                fullWidth
+              >
+                <MenuItem value="">Select</MenuItem>
+                <MenuItem value="Visual">Visual</MenuItem>
+                <MenuItem value="Auditory">Auditory</MenuItem>
+                <MenuItem value="Reading/Writing">Reading / Writing</MenuItem>
+                <MenuItem value="Kinesthetic">Kinesthetic</MenuItem>
+              </TextField>
+            </Grid>
 
-          {/* ONLINE COURSES */}
-          <label style={styles.label}>Online Courses Completed</label>
-          <input
-            type="number"
-            name="Online_Courses_Completed"
-            value={formData.Online_Courses_Completed}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          />
+            {/* row 2 */}
+            <Grid item xs={12} sm={4}>
+              <TextField
+                label="Online Courses Completed"
+                name="Online_Courses_Completed"
+                type="number"
+                placeholder="e.g. 3"
+                value={formData.Online_Courses_Completed}
+                onChange={handleChange}
+                helperText="Number of completed online courses"
+                variant="outlined"
+                fullWidth
+              />
+            </Grid>
 
-          {/* DISCUSSION */}
-          <label style={styles.label}>Participation in Discussions</label>
-          <select
-            name="Participation_in_Discussions"
-            value={formData.Participation_in_Discussions}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          >
-            <option value="">Select</option>
-            <option value="Yes">Yes</option>
-            <option value="No">No</option>
-          </select>
+            <Grid item xs={12} sm={2}>
+              <TextField
+                label="Participation"
+                name="Participation_in_Discussions"
+                select
+                value={formData.Participation_in_Discussions}
+                onChange={handleChange}
+                helperText="Active in discussions?"
+                variant="outlined"
+                fullWidth
+              >
+                <MenuItem value="">Select</MenuItem>
+                <MenuItem value="Yes">Yes</MenuItem>
+                <MenuItem value="No">No</MenuItem>
+              </TextField>
+            </Grid>
 
-          {/* ASSIGNMENT */}
-          <label style={styles.label}>Assignment Completion (%)</label>
-          <input
-            type="number"
-            name="Assignment_Completion_Rate"
-            value={formData.Assignment_Completion_Rate}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          />
+            <Grid item xs={12} sm={2}>
+              <TextField
+                label="Assignments (%)"
+                name="Assignment_Completion_Rate"
+                type="number"
+                placeholder="e.g. 85"
+                value={formData.Assignment_Completion_Rate}
+                onChange={handleChange}
+                helperText="Completion rate (0–100)"
+                variant="outlined"
+                fullWidth
+                inputProps={{ min: 0, max: 100 }}
+              />
+            </Grid>
 
-          {/* EXAM SCORE */}
-          <label style={styles.label}>Exam Score (%)</label>
-          <input
-            type="number"
-            name="Exam_Score"
-            value={formData.Exam_Score}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          />
+            <Grid item xs={12} sm={2}>
+              <TextField
+                label="Exam Score (%)"
+                name="Exam_Score"
+                type="number"
+                placeholder="e.g. 72"
+                value={formData.Exam_Score}
+                onChange={handleChange}
+                helperText="Recent exam score"
+                variant="outlined"
+                fullWidth
+                inputProps={{ min: 0, max: 100 }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <ScoreIcon />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
 
-          {/* ATTENDANCE */}
-          <label style={styles.label}>Attendance (%)</label>
-          <input
-            type="number"
-            name="Attendance_Rate"
-            value={formData.Attendance_Rate}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          />
+            <Grid item xs={12} sm={2}>
+              <TextField
+                label="Attendance (%)"
+                name="Attendance_Rate"
+                type="number"
+                placeholder="e.g. 90"
+                value={formData.Attendance_Rate}
+                onChange={handleChange}
+                helperText="Class attendance rate"
+                variant="outlined"
+                fullWidth
+                inputProps={{ min: 0, max: 100 }}
+              />
+            </Grid>
 
-          {/* TECH */}
-          <label style={styles.label}>Use of Educational Tech</label>
-          <select
-            name="Use_of_Educational_Tech"
-            value={formData.Use_of_Educational_Tech}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          >
-            <option value="">Select</option>
-            <option value="Yes">Yes</option>
-            <option value="No">No</option>
-          </select>
+            {/* row 3 */}
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="Use of EdTech"
+                name="Use_of_Educational_Tech"
+                select
+                value={formData.Use_of_Educational_Tech}
+                onChange={handleChange}
+                helperText="Uses learning platforms?"
+                variant="outlined"
+                fullWidth
+              >
+                <MenuItem value="">Select</MenuItem>
+                <MenuItem value="Yes">Yes</MenuItem>
+                <MenuItem value="No">No</MenuItem>
+              </TextField>
+            </Grid>
 
-          {/* STRESS */}
-          <label style={styles.label}>Stress Level</label>
-          <select
-            name="Self_Reported_Stress_Level"
-            value={formData.Self_Reported_Stress_Level}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          >
-            <option value="">Select</option>
-            <option value="High">High</option>
-            <option value="Medium">Medium</option>
-            <option value="Low">Low</option>
-          </select>
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="Stress Level"
+                name="Self_Reported_Stress_Level"
+                select
+                value={formData.Self_Reported_Stress_Level}
+                onChange={handleChange}
+                helperText="High / Medium / Low"
+                variant="outlined"
+                fullWidth
+              >
+                <MenuItem value="">Select</MenuItem>
+                <MenuItem value="High">High</MenuItem>
+                <MenuItem value="Medium">Medium</MenuItem>
+                <MenuItem value="Low">Low</MenuItem>
+              </TextField>
+            </Grid>
 
-          {/* SOCIAL MEDIA */}
-          <label style={styles.label}>Social Media (hrs/week)</label>
-          <input
-            type="number"
-            name="Time_Spent_on_Social_Media"
-            value={formData.Time_Spent_on_Social_Media}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          />
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="Social Media (hrs/week)"
+                name="Time_Spent_on_Social_Media"
+                type="number"
+                placeholder="e.g. 14"
+                value={formData.Time_Spent_on_Social_Media}
+                onChange={handleChange}
+                helperText="Time spent on social media"
+                variant="outlined"
+                fullWidth
+              />
+            </Grid>
 
-          {/* SLEEP */}
-          <label style={styles.label}>Sleep Hours / Night</label>
-          <input
-            type="number"
-            name="Sleep_Hours_per_Night"
-            value={formData.Sleep_Hours_per_Night}
-            onChange={handleChange}
-            style={styles.input}
-            required
-          />
-        </div>
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="Sleep Hours / Night"
+                name="Sleep_Hours_per_Night"
+                type="number"
+                placeholder="e.g. 7"
+                value={formData.Sleep_Hours_per_Night}
+                onChange={handleChange}
+                helperText="Average sleep hours"
+                variant="outlined"
+                fullWidth
+              />
+            </Grid>
 
-        <button type="submit" style={styles.button}>
-          {loading ? "Predicting..." : "Predict"}
-        </button>
-      </form>
+            {/* CTA */}
+            <Grid item xs={12} sx={{ mt: 1 }}>
+              <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                  sx={{ px: 4, py: 1.6, fontWeight: 800 }}
+                  startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <PollIcon />}
+                  disabled={loading}
+                >
+                  {loading ? "Predicting..." : "Predict Performance"}
+                </Button>
 
-      {/* Display Prediction */}
-      {prediction && (
-        <div style={styles.result}>
-          <h3>🎯 Predicted Grade:</h3>
-          <p>{prediction}</p>
-        </div>
-      )}
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  Tip: fill Age, Exam Score and Assignments for a better prediction.
+                </Typography>
+              </Box>
+            </Grid>
+          </Grid>
+        </Box>
 
-      {/* Display Error */}
-      {error && (
-        <div style={{ ...styles.result, color: "red" }}>
-          <p>{error}</p>
-        </div>
-      )}
-    </div>
+        {/* result / error */}
+        <Box sx={{ mt: 3 }}>
+          {error && <Alert severity="error">{error}</Alert>}
+
+          {prediction !== null && (
+            <Box
+              sx={{
+                mt: 1,
+                p: 2,
+                borderRadius: 2,
+                backgroundColor: resStyle.bgcolor,
+                color: resStyle.color,
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+              }}
+            >
+              <Typography sx={{ fontWeight: 800, fontSize: 16 }}>
+                {resStyle.icon} Predicted Grade: <span style={{ marginLeft: 8 }}>{prediction}</span>
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      </CardContent>
+    </Card>
   );
-};
+}
 
-// Styles
-const styles = {
-  form: {
-    padding: "25px",
-    background: "linear-gradient(135deg, #e3f2fd, #ffffff)",
-    borderRadius: "12px",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-  },
-  heading: {
-    textAlign: "center",
-    marginBottom: "20px",
-    fontSize: "24px",
-    fontWeight: "bold",
-    color: "#1a237e",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "15px",
-  },
-  label: {
-    fontWeight: "bold",
-    color: "#0d47a1",
-  },
-  input: {
-    padding: "9px",
-    border: "1px solid #90caf9",
-    borderRadius: "6px",
-    outline: "none",
-  },
-  button: {
-    width: "100%",
-    marginTop: "20px",
-    padding: "14px",
-    background: "#1e88e5",
-    color: "white",
-    fontSize: "18px",
-    border: "none",
-    borderRadius: "10px",
-    cursor: "pointer",
-    fontWeight: "bold",
-  },
-  result: {
-    marginTop: "20px",
-    padding: "15px",
-    background: "#e8f5e9",
-    borderRadius: "10px",
-    textAlign: "center",
-    fontSize: "20px",
-    color: "#2e7d32",
-    fontWeight: "bold",
-  },
+InputForm.propTypes = {
+  onResult: PropTypes.func,
 };
-
-export default InputForm;

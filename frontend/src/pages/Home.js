@@ -1,72 +1,66 @@
-// src/pages/Home.js
 import React from "react";
+import { Box, Grid, Typography } from "@mui/material";
 import InputForm from "../components/InputForm";
+import ProgressTracker from "../components/ProgressTracker";
+import { useAuth } from "../context/AuthContext";
+import Chatbot from "../components/Chatbot";
 
-const Home = ({onResult, result}) => {
+export default function Home() {
+  const { user, logout } = useAuth();
+  // If no user, you can show a message or fallback to a temporary id.
+  const currentUserId = user?.id ?? "student_guest"; // fallback for testing
+
   return (
-    <div style={styles.container}>
-      <h1 style={styles.heading}>🎓 Student Performance Predictor</h1>
-      <p style={styles.subheading}>
-        Predict student performance, track learning progress, and help students and teachers excel!
-      </p>
+    <Box>
+      {/* Hero */}
+      <Box sx={{ textAlign: "center", mb: 6, mt: { xs: 2, md: 4 } }}>
+        <Typography variant="h3" sx={{ fontWeight: 900, color: "#0f172a" }}>
+          Predict student performance, track learning progress, and help teachers & students excel
+        </Typography>
+        <Typography variant="body1" sx={{ color: "text.secondary", mt: 1 }}>
+          Fast predictions, actionable tips, and clear visualizations.
+        </Typography>
+      </Box>
 
-      <div style={styles.features}>
-        <FeatureCard
-          title="Students"
-          description="Monitor progress, improve learning outcomes, and stay ahead academically."
-          img="https://via.placeholder.com/150"
-        />
-        <FeatureCard
-          title="Teachers"
-          description="Analyze student performance, provide guidance, and enhance teaching strategies."
-          img="https://via.placeholder.com/150"
-        />
-        <FeatureCard
-          title="Features"
-          description="Predict grades, track attendance, assignments, and social engagement."
-          img="https://via.placeholder.com/150"
-        />
-      </div>
+      {/* Feature cards */}
+      <Grid container spacing={4} sx={{ mb: 6 }}>
+        {[
+          { title: "Students", desc: "Monitor progress, improve learning outcomes, and stay ahead academically." },
+          { title: "Teachers", desc: "Analyze performance, provide guidance, and refine teaching strategies." },
+          { title: "Features", desc: "Predict grades, track attendance, and monitor assignment completion." },
+        ].map((c, i) => (
+          <Grid item xs={12} md={4} key={i}>
+            <Box
+              sx={{
+                p: 4,
+                borderRadius: 3,
+                background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,255,0.95))",
+                boxShadow: "0 14px 40px rgba(16,24,40,0.06)",
+                height: "100%",
+              }}
+            >
+              <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>
+                {c.title}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                {c.desc}
+              </Typography>
+            </Box>
+          </Grid>
+        ))}
+      </Grid>
 
-       <div style={styles.container}>
-      <h1>🎓 Student Performance Predictor</h1>
-      <p>Predict student performance using multiple metrics!</p>
+      {/* Prediction form */}
+      <Box sx={{ maxWidth: 980, mx: "auto" }}>
+        <InputForm />
+      </Box>
 
-      <InputForm onResult={onResult} />
-
-      {result && (
-        <div style={styles.resultBox}>
-          <h3>📊 Prediction Result</h3>
-          <p>Predicted Grade: <b>{result}</b></p>
-        </div>
-      )}
-    </div>
-    </div>
+      {/* ---- Progress Tracker ---- */}
+      <ProgressTracker
+        studentId={currentUserId}
+        apiBase="http://localhost:5000"
+      />
+      <Chatbot studentId={currentUserId} apiBase="http://localhost:5000" />
+    </Box>
   );
-};
-
-const FeatureCard = ({ title, description, img }) => (
-  <div style={styles.card}>
-    <img src={img} alt={title} style={styles.img} />
-    <h3>{title}</h3>
-    <p>{description}</p>
-  </div>
-);
-
-const styles = {
-  container: { padding: "30px", textAlign: "center" },
-  heading: { fontSize: "32px", color: "#eceef8ff" },
-  subheading: { fontSize: "18px", marginBottom: "30px" },
-  features: { display: "flex", justifyContent: "space-around", flexWrap: "wrap", gap: "20px" },
-  card: { width: "250px", padding: "15px", boxShadow: "0 4px 12px rgba(241, 241, 241, 0.99)",color:"rgba(243, 243, 243, 1)", borderRadius: "10px" },
-  img: { width: "100%", borderRadius: "10px", marginBottom: "10px" },
-  resultBox: {
-    marginTop: "20px",
-    padding: "15px",
-    background: "#e8f0fe",
-    borderRadius: "10px",
-    borderLeft: "5px solid #2575fc",
-  },
-};
-
-export default Home;
+}

@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 
 import InputForm from "../components/InputForm";
 import ProgressTracker from "../components/ProgressTracker";
-import Chatbot from "../components/Chatbot";
+
 import { useAuth } from "../context/AuthContext";
 
 import StudentImg from "../assets/images/Student.png";
@@ -171,15 +171,7 @@ export default function Home() {
         {/* ------------------------------------ */}
         {/* AI CHATBOT */}
         {/* ------------------------------------ */}
-        <Box sx={{ mt: 12, mb: 10 }}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-          >
-            <Chatbot studentId={currentUserId} apiBase="http://localhost:5000" />
-          </motion.div>
-        </Box>
+  
       </Container>
     </Box>
   );

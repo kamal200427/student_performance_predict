@@ -1,4 +1,4 @@
-# progress_api.py (updated fully)
+# progress_api.py (updated, no student_id filtering)
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
@@ -34,6 +34,20 @@ class ProgressEntry(db.Model):
 # -----------------------
 # Routes
 # -----------------------
+
+# --- Latest 10 entries (global, no student filter) ---
+@progress_bp.route("/progress/latest10", methods=["GET"])
+def latest_10_progress():
+    q = ProgressEntry.query.order_by(
+        ProgressEntry.date.desc(),
+        ProgressEntry.time.desc()
+    ).limit(7)
+
+    results = [r.to_dict() for r in q.all()]
+    return jsonify({"entries": results})
+
+
+# --- Add progress entry ---
 @progress_bp.route("/progress", methods=["POST"])
 def add_progress():
     payload = request.get_json(force=True)
@@ -73,41 +87,39 @@ def add_progress():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+
+# --- Get ALL progress entries (NO student_id filter) ---
 @progress_bp.route("/progress", methods=["GET"])
 def get_progress():
-    student_id = request.args.get("student_id")
-    if not student_id:
-        return jsonify({"error": "student_id required"}), 400
-
     date_from = request.args.get("from")
     date_to = request.args.get("to")
 
-    q = ProgressEntry.query.filter_by(student_id=student_id)
+    q = ProgressEntry.query
+
     if date_from:
         q = q.filter(ProgressEntry.date >= datetime.fromisoformat(date_from).date())
     if date_to:
         q = q.filter(ProgressEntry.date <= datetime.fromisoformat(date_to).date())
 
-    q = q.order_by(ProgressEntry.date.asc(), ProgressEntry.time.asc())
+    q = q.order_by(ProgressEntry.date.desc(), ProgressEntry.time.desc())
+
     results = [r.to_dict() for r in q.all()]
     return jsonify({"entries": results})
 
+
+# --- Summary of ALL entries (NO student filter) ---
 @progress_bp.route("/progress/summary", methods=["GET"])
 def progress_summary():
-    student_id = request.args.get("student_id")
-    if not student_id:
-        return jsonify({"error": "student_id required"}), 400
-
-    q = ProgressEntry.query.filter_by(student_id=student_id)
+    q = ProgressEntry.query
     total = q.count()
     if total == 0:
         return jsonify({"summary": {}, "count": 0})
 
-    avg_study = db.session.query(db.func.avg(ProgressEntry.study_hours)).filter_by(student_id=student_id).scalar()
-    avg_exam = db.session.query(db.func.avg(ProgressEntry.exam_score)).filter_by(student_id=student_id).scalar()
-    avg_att = db.session.query(db.func.avg(ProgressEntry.attendance)).filter_by(student_id=student_id).scalar()
-    avg_sleep = db.session.query(db.func.avg(ProgressEntry.sleep_hours)).filter_by(student_id=student_id).scalar()
-    avg_stress = db.session.query(db.func.avg(ProgressEntry.stress_level)).filter_by(student_id=student_id).scalar()
+    avg_study = db.session.query(db.func.avg(ProgressEntry.study_hours)).scalar()
+    avg_exam = db.session.query(db.func.avg(ProgressEntry.exam_score)).scalar()
+    avg_att = db.session.query(db.func.avg(ProgressEntry.attendance)).scalar()
+    avg_sleep = db.session.query(db.func.avg(ProgressEntry.sleep_hours)).scalar()
+    avg_stress = db.session.query(db.func.avg(ProgressEntry.stress_level)).scalar()
 
     return jsonify({
         "count": total,

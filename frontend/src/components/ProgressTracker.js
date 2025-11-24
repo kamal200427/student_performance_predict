@@ -111,14 +111,23 @@ export default function ProgressTracker({ studentId = "student-1", apiBase = "ht
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis
+          dataKey="study_hours"
+          label={{
+          value: "Study Hours",
+          position: "outsideBottom",
+          // moves label closer or farther from axis
+          dy: 10,        // pushes label downward to make it visible
+          style: { fontSize: 14, fontWeight: 600 }
+          }}
+          />
+
             <YAxis
               yAxisId="left"
-              label={{ value: "Hours / Score", angle: -90, position: "insideLeft" }}
+              label={{ value: "Exam score", angle: -90, position: "insideLeft" }}
             />
             <Tooltip />
             <Legend />
-            <Line yAxisId="left" type="monotone" dataKey="study_hours" name="Study Hours" stroke="#6a1b9a" strokeWidth={3} />
             <Line yAxisId="left" type="monotone" dataKey="exam_score" name="Exam Score" stroke="#0ea5a4" strokeWidth={3} />
           </LineChart>
         </ResponsiveContainer>

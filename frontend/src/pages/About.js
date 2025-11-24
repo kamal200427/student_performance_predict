@@ -19,7 +19,7 @@ export default function About() {
       </Typography>
 
       <Typography variant="h5" sx={{ fontWeight: 800, mb: 2, color: "#6A1B9A" }}>
-        How Users Can Use This Project
+        How Students Can Use This Project
       </Typography>
 
       <Box

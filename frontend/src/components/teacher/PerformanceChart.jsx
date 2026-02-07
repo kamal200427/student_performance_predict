@@ -1,28 +1,27 @@
 import { useEffect, useState } from "react";
   
-import axios from "axios"; import { LineChart, 
+  import { LineChart, 
   Line, 
   XAxis,
    YAxis, 
    Tooltip,
     CartesianGrid, 
     ResponsiveContainer, 
-    BarChart, 
-    Bar, } from "recharts"; 
+     } from "recharts"; 
 import { Box, 
   Typography, 
   CircularProgress,
    Paper } from "@mui/material";
 export default function PerformanceChart({ result }) {
   const [trend, setTrend] = useState([]);
-  const [distribution, setDistribution] = useState([]);
+   
   const [loading, setLoading] = useState(false);
 
   // ✅ Hook is ALWAYS called
   useEffect(() => {
     if (!result) {
       setTrend([]);
-      setDistribution([]);
+     
       return;
     }
 

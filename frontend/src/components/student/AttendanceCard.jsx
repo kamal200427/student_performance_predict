@@ -1,9 +1,9 @@
 // frontend/src/components/student/AttendanceCard.js
 
-import React from "react";
+ 
 import PropTypes from "prop-types";
 import { Card, CardContent, Typography, Box, LinearProgress } from "@mui/material";
-import predict from "../../api/predict";
+
 /**
  * AttendanceCard
  * Shows today's attendance and overall percentage in a visual way

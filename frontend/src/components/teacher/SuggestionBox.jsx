@@ -11,10 +11,8 @@ import {
   Checkbox,
   Stack,
 } from "@mui/material";
-import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
-import {sentSuggestionapi} from "../../api/teacher"
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import {sentSuggestionapi} from "../../api/teacher";
 
 export default function SuggestionBox({
   selectedStudents = [],

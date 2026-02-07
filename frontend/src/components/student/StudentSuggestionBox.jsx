@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
 import {
   Card,
   CardContent,
@@ -22,7 +21,7 @@ export default function StudentSuggestionBox() {
   const { user } = useAuth();
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [err, setError] = useState(null);
+   
 useEffect(() => {
     if (!user?.id) return;
   const loadProgress = async () => {
@@ -33,7 +32,7 @@ useEffect(() => {
           setSuggestions(res)
           setLoading(false)
         } catch (err) {
-          setError(err.message);
+          console.log(err.message);
         }
          
       };

@@ -1,246 +1,68 @@
-# app.py (merged predict + progress blueprint + chat)
-import os
-import subprocess
-import time
-import logging
-import pickle
-from typing import Any
+# backend/app.py
+
+ 
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pandas as pd
-import requests
-import traceback
-from openai import OpenAI
-# progress_model must provide db and progress_bp (your existing code)
-from progress_model import db, progress_bp,ProgressEntry
-from datetime import datetime,timezone
 
-# Optional OpenAI import
-try:
-    import openai
-except Exception:
-    openai = None
+from database.db import db
+from models.performance import StudentDailyPerformance
+from models.suggestion import Suggestion
+from models.performance import StudentDailyPerformance
+from models.user import User
 
+
+from auth import auth_bp
+from routes.predict_routes import predict_bp
+from routes.student_routes import student_bp
+from routes.progress_routes import progress_bp
+from routes.teacher_routes import teacher_bp
 # -----------------------
 # Configuration
 # -----------------------
-MODEL_BUNDLE_PATH = "model_bundle.pkl"
-GENERATE_CMD = ["python", "model.py"]
-BOT_AVATAR_PATH = "/mnt/data/950f54f9-3774-48b8-b476-6f101956ee6f.png"  # dev avatar file path
-
-CHAT_RATE_LIMIT_PERIOD = 60
-CHAT_RATE_LIMIT_MAX = 40
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
-
+ 
 # -----------------------
 # Flask app + DB + CORS
 # -----------------------
 app = Flask(__name__)
 CORS(app)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///student_performance.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+CORS(app, origins=["http://localhost:3000"])
+
 db.init_app(app)
+
+# REGISTER BLUEPRINT 👇
+app.register_blueprint(auth_bp)
+app.register_blueprint(predict_bp)
+app.register_blueprint(student_bp)
+app.register_blueprint(progress_bp)
+app.register_blueprint(teacher_bp)
+
 with app.app_context():
     db.create_all()
-app.register_blueprint(progress_bp)
 
 # -----------------------
-# Load model bundle
+# Health check
 # -----------------------
-def ensure_model_bundle(path: str):
-    if not os.path.exists(path):
-        logger.info("%s not found, running model.py to generate it...", path)
-        subprocess.run(GENERATE_CMD, check=True)
-
-ensure_model_bundle(MODEL_BUNDLE_PATH)
-with open(MODEL_BUNDLE_PATH, "rb") as f:
-    bundle = pickle.load(f)
-
-model = bundle.get("model")
-le_gender = bundle.get("le_gender")
-le_style = bundle.get("le_style")
-le_discussion = bundle.get("le_discussion")
-le_tech = bundle.get("le_tech")
-le_level = bundle.get("le_level")
-le_grade = bundle.get("le_grade")
-
-FEATURES = [
-    "Age", "Gender", "Study_Hours_per_Week", "Preferred_Learning_Style",
-    "Online_Courses_Completed", "Participation_in_Discussions",
-    "Assignment_Completion_Rate", "Exam_Score", "Attendance_Rate",
-    "Use_of_Educational_Tech", "Self_Reported_Stress_Level",
-    "Time_Spent_on_Social_Media", "Sleep_Hours_per_Night"
-]
-
-# -----------------------
-# Helpers for prediction
-# -----------------------
-def safe_label_transform(le, value: Any, field_name: str):
-    try:
-        return le.transform([value])[0]
-    except Exception:
-        logger.warning("Unknown category for %s: %s — falling back to first class.", field_name, value)
-        try:
-            return le.transform([le.classes_[0]])[0]
-        except Exception:
-            return 0
-
-def to_float_safe(v, field):
-    try:
-        return float(v)
-    except Exception:
-        raise ValueError(f"Field {field} must be numeric; got {v!r}")
-
-# -----------------------
-# Prediction endpoint
-# -----------------------
-@app.route("/predict", methods=["POST"])
-def predict():
-    try:
-        data = request.get_json(force=True)
-        if not isinstance(data, dict):
-            return jsonify({"error": "Invalid JSON payload"}), 400
-
-        input_data = {}
-        for feature in FEATURES:
-            if feature not in data:
-                return jsonify({"error": f"Missing value for {feature}"}), 400
-            value = data[feature]
-            if feature == "Gender":
-                input_data[feature] = safe_label_transform(le_gender, value, "Gender")
-            elif feature == "Preferred_Learning_Style":
-                input_data[feature] = safe_label_transform(le_style, value, "Preferred_Learning_Style")
-            elif feature == "Participation_in_Discussions":
-                input_data[feature] = safe_label_transform(le_discussion, value, "Participation_in_Discussions")
-            elif feature == "Use_of_Educational_Tech":
-                input_data[feature] = safe_label_transform(le_tech, value, "Use_of_Educational_Tech")
-            elif feature == "Self_Reported_Stress_Level":
-                input_data[feature] = safe_label_transform(le_level, value, "Self_Reported_Stress_Level")
-            else:
-                input_data[feature] = to_float_safe(value, feature)
-
-        df = pd.DataFrame([input_data])
-        pred = model.predict(df)
-        try:
-            final_grade = le_grade.inverse_transform([int(pred[0])])[0]
-        except Exception:
-            final_grade = pred[0]
-         # ---------------------------
-        # Store in progress database
-        # -----------------------
-        i=1
-        student_id = data.get("student_id", f"{i+1}")
-        stress_level_value = data.get("Self_Reported_Stress_Level")
-# Map string levels to int (High=3, Medium=2, Low=1) if needed
-        if isinstance(stress_level_value, str):
-            mapping = {"Low": 1, "Medium": 2, "High": 3}
-            stress_level_value = mapping.get(stress_level_value, 0)
-        else:
-            stress_level_value = int(stress_level_value or 0)
-
-        new_entry = ProgressEntry(
-        student_id=student_id,
-        time=datetime.now(timezone.utc).time(),
-        date=datetime.now(timezone.utc).date(),
-        study_hours=input_data["Study_Hours_per_Week"],
-        exam_score=input_data["Exam_Score"],
-        attendance=input_data["Attendance_Rate"],
-        stress_level=stress_level_value,
-        sleep_hours=input_data["Sleep_Hours_per_Night"],
-        )
-        db.session.add(new_entry)
-        db.session.commit()
-        return jsonify({"predicted_grade": final_grade})
-    except Exception as e:
-        logger.exception("Prediction error")
-        return jsonify({"error": str(e)}), 500
-
-# -----------------------
-# Chatbot endpoint (OpenAI-backed; fallback included)
-# -----------------------
-_visits = {}
-
-def rate_limit_check(ip: str, limit: int = CHAT_RATE_LIMIT_MAX, period: int = CHAT_RATE_LIMIT_PERIOD):
-    now = time.time()
-    _visits.setdefault(ip, [])
-    _visits[ip] = [t for t in _visits[ip] if now - t < period]
-    if len(_visits[ip]) >= limit:
-        return False
-    _visits[ip].append(now)
-    return True
-
-def tutor_system_prompt():
-    return (
-        "You are an empathetic, concise tutoring assistant for school/college students. "
-        "Give step-by-step explanations, study tips, and short mini-exercises when helpful. "
-        "Reference student progress if available. Keep answers friendly and actionable."
-    )
-
-def fetch_student_progress_text(student_id: str, limit: int = 8) -> str:
-    try:
-        base = request.url_root.rstrip("/")
-        r = requests.get(f"{base}/progress", params={"student_id": student_id}, timeout=2)
-        if not r.ok:
-            return ""
-        data = r.json()
-        entries = data.get("entries", [])[-limit:]
-        if not entries:
-            return ""
-        s = "Student recent progress (date, study_hours, exam_score, attendance, sleep):\n"
-        for e in entries:
-            s += f"{e.get('date')}: study={e.get('study_hours')}, exam={e.get('exam_score')}, att={e.get('attendance')}, sleep={e.get('sleep_hours')}\n"
-        return s
-    except Exception:
-        logger.debug("Could not fetch progress for student %s", student_id)
-        return ""
-# Initialize OpenAI client
-client = OpenAI(api_key="OPENAI_API_KEY")
-# 1. Chatbot Fallback Function
-# ---------------------------
-def fallback_reply(msg):
-    return f"Sorry, I could not process that. But I'm here — ask me anything!"
-
-@app.route("/api/chat", methods=["POST"])
-def chat():
-    try:
-        data = request.get_json()
-        user_msg = data.get("message", "")
-
-        completion = client.responses.create(
-            model="gpt-4.1-mini",
-            input=user_msg
-        )
-
-        reply = completion.output_text
-
-        return jsonify({"reply": reply})
-
-    except Exception as e:
-        print("Chat Error:", e)
-        traceback.print_exc()
-
-        # Return fallback reply
-        return jsonify({"reply": fallback_reply(user_msg)})
-
-
-# -----------------------
-# health + root
-# -----------------------
-@app.route("/health", methods=["GET"])
+@app.route("/attendance")
 def health():
-    return jsonify({"status": "healthy", "bot_avatar": BOT_AVATAR_PATH})
+    return "kamalk"
+    return jsonify({"status": "ok"})
 
-@app.route("/", methods=["GET"])
-def home():
-    return "Student Performance Prediction API Running!"
 
 # -----------------------
-# run app
+# Root
+# -----------------------
+@app.route("/")
+def home():
+    return "Student Performance Prediction API Running"
+
+
+# -----------------------
+# Run
 # -----------------------
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    logger.info("Starting app on port %s", port)
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(debug=True, port=5000)
